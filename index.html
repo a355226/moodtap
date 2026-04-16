@@ -1,3 +1,12 @@
+為了呈現出「美觀、專業且帶有柔和曲線」的心情趨勢圖，我為你導入了目前網頁開發最主流、輕量且視覺效果極佳的圖表工具 **Chart.js**。
+### 🌟 新增功能與設計亮點：
+ 1. **近月趨勢圖按鈕：** 在歷史紀錄的篩選列新增了「📈 近月趨勢圖」按鈕。點擊後會平滑展開一個圖表區塊。
+ 2. **自動彙整演算法：** 程式會自動抓取「近 30 天」的紀錄，如果同一天你記錄了多次心情，它會聰明地計算出**「當日平均分數」**，讓曲線圖不雜亂。
+ 3. **美觀的柔和漸層與曲線：** 圖表使用了貝茲曲線（Bezier Curve）讓折線變成滑順的波浪，並在曲線下方加入呼應應用程式主題色的半透明漸層。游標（或手指）移過去還會顯示當天的具體分數！
+ 4. **即時連動：** 如果你在下方刪除了某筆紀錄，上方的圖表會**即時重新計算並重繪**，不會有資料不同步的問題。
+請將下方包含最新圖表功能的程式碼覆蓋你原本的 index.html：
+### 完整網頁程式碼
+```html
 <!DOCTYPE html>
 <html lang="zh-TW">
   <head>
@@ -9,7 +18,8 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-<title>MoonTap</title>
+    <title>MoonTap</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   :root {
     --bg-gradient: linear-gradient(135deg, #fff9c4 0%, #e8f5e9 50%, #e1f5fe 100%);
@@ -69,7 +79,7 @@
     color: var(--text-muted); user-select: none; -webkit-user-select: none;
     white-space: nowrap; box-shadow: 0 4px 10px rgba(0,0,0,0.04);
     transition: background 0.2s, color 0.2s; 
-    touch-action: none; /* 防止滑動畫面干擾觸控 */
+    touch-action: none; 
     will-change: transform;
   }
   .floating-word.active-joy { background: var(--joy); color: white; }
@@ -97,14 +107,30 @@
   .modal.show { display: flex; }
   .modal-content {
     background: #fff; width: 95%; max-width: 500px; max-height: 85vh; border-radius: 20px;
-    padding: 25px; box-sizing: border-box; position: relative; overflow-y: auto;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2); display: flex; flex-direction: column;
+    padding: 20px; box-sizing: border-box; position: relative; display: flex; flex-direction: column;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
   }
-  .close-btn { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: #999; }
+  .close-btn { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: #999; z-index: 10; }
   
-  .filter-bar { display: flex; gap: 10px; margin-bottom: 15px; background: #f0f3f5; padding: 10px; border-radius: 12px; flex-wrap: wrap; }
-  .filter-bar input, .filter-bar select { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 8px; outline: none; }
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 15px; background: #f0f3f5; padding: 10px; border-radius: 12px; flex-wrap: wrap; align-items: center; }
+  .filter-bar input, .filter-bar select { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 8px; outline: none; min-width: 100px; }
+  .action-btn { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+  .action-btn:hover { opacity: 0.8; }
+  .btn-clear { background: #ccc; color: #333; }
+  .btn-chart { background: #0984e3; color: #fff; flex-grow: 1; text-align: center; }
   
+  /* 圖表容器 */
+  .chart-container {
+    width: 100%; height: 250px; display: none; margin-bottom: 15px;
+    background: #f8f9fa; border-radius: 12px; padding: 10px; box-sizing: border-box;
+    animation: fadeInDown 0.3s ease forwards;
+  }
+  @keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .history-list-container { overflow-y: auto; flex-grow: 1; padding-right: 5px; }
   .history-item { background: #f8f9fa; border-left: 5px solid var(--pleasure); padding: 15px; margin-bottom: 15px; border-radius: 8px; position: relative; }
   .h-date { font-size: 0.85rem; color: #888; margin-bottom: 5px; }
   .h-score { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; }
@@ -160,6 +186,7 @@
   <div class="modal-content">
     <span class="close-btn" onclick="toggleHistory()">&times;</span>
     <h2 style="margin-top:0; color: #2c3e50;">心情日記回顧</h2>
+    
     <div class="filter-bar">
       <input type="date" id="filterDate" onchange="renderHistory()">
       <select id="filterScore" onchange="renderHistory()">
@@ -168,14 +195,20 @@
         <option value="mid">平靜 (46-60)</option>
         <option value="low">低落 (0-45)</option>
       </select>
-      <button onclick="clearFilters()" style="padding: 8px; border:none; background:#ccc; border-radius:8px; cursor:pointer;">清除</button>
+      <button class="action-btn btn-clear" onclick="clearFilters()">清除</button>
+      <button class="action-btn btn-chart" onclick="toggleTrendChart()">📈 近月趨勢圖</button>
     </div>
-    <div id="historyList" style="overflow-y:auto; flex-grow:1;"></div>
+
+    <div class="chart-container" id="chartContainer">
+      <canvas id="trendChart"></canvas>
+    </div>
+
+    <div class="history-list-container" id="historyList"></div>
   </div>
 </div>
 
 <div id="customizeModal" class="modal">
-  <div class="modal-content">
+  <div class="modal-content" style="overflow-y:auto;">
     <span class="close-btn" onclick="closeCustomize()">&times;</span>
     <h2 style="margin-top:0; color: #2c3e50;">自訂專屬字詞</h2>
     <p style="font-size:0.85rem; color:#666; margin-top:0;">正分請輸入正數，負分請輸入負數。</p>
@@ -198,6 +231,9 @@ let currentScore = 50;
 let wordClicks = {}; 
 let elements = [];
 let animationId;
+let chartInstance = null; // 儲存圖表實例
+let isChartVisible = false;
+
 const arena = document.getElementById('arena');
 
 function initWords() {
@@ -290,21 +326,18 @@ function animate() {
   animationId = requestAnimationFrame(animate);
 }
 
-// 📌 【重點修復區塊】：全面改用 Pointer Events 防雙擊
 function bindInteractions(item) {
   let pressTimer;
   let startPos = { x: 0, y: 0 };
-  let isLongPress = false; // 紀錄是否觸發過長按
+  let isLongPress = false; 
 
   const startPress = (e) => {
     isLongPress = false; 
     startPos = { x: e.clientX, y: e.clientY };
-    
-    // 捕獲指標，避免滑動時丟失焦點
     item.el.setPointerCapture(e.pointerId);
 
     pressTimer = setTimeout(() => {
-      isLongPress = true; // 上鎖：標記已執行歸零
+      isLongPress = true; 
       const clicks = wordClicks[item.config.text];
       if (clicks > 0) {
         currentScore -= (clicks * item.config.weight);
@@ -318,28 +351,17 @@ function bindInteractions(item) {
   const endPress = (e) => {
     if (pressTimer) clearTimeout(pressTimer);
     item.el.releasePointerCapture(e.pointerId);
-
-    // 【防禦核心】如果長按鎖已經啟動，直接撤退，不加分！
     if (isLongPress) return; 
-
-    // 誤差超過 5px 視為純粹的拖曳/滾動，不是點擊
     if (Math.abs(e.clientX - startPos.x) > 5 || Math.abs(e.clientY - startPos.y) > 5) return;
 
-    // 正常點擊加分邏輯
     wordClicks[item.config.text]++; currentScore += item.config.weight;
     updateWordStyle(item); updateDisplay();
     const color = item.config.weight > 0 ? (item.config.type === 'joy' ? '#ff7675' : '#00b894') : (item.config.type === 'anger' ? '#d63031' : '#0984e3');
     createPopEffect(item.config.text, (item.config.weight > 0 ? '+' : '') + item.config.weight, e.clientX, e.clientY, color);
   };
 
-  const cancelPress = () => {
-    if (pressTimer) clearTimeout(pressTimer);
-  };
-
-  // 禁用手機長按時原生跳出的「複製/儲存圖片」選單
+  const cancelPress = () => { if (pressTimer) clearTimeout(pressTimer); };
   item.el.addEventListener('contextmenu', (e) => e.preventDefault());
-
-  // 綁定現代化指標事件，取代 touchstart/mousedown
   item.el.addEventListener('pointerdown', startPress);
   item.el.addEventListener('pointerup', endPress);
   item.el.addEventListener('pointercancel', cancelPress);
@@ -382,8 +404,7 @@ function resetScore() {
 
 function saveAndReset() {
   const now = new Date(), timeStr = now.toLocaleDateString('zh-TW') + ' ' + now.toLocaleTimeString('zh-TW', {hour: '2-digit', minute:'2-digit'});
-  const isoDate = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-  const history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
+  const isoDate = now.toISOString().split('T')[0], history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
   const activeWords = Object.keys(wordClicks).filter(k => wordClicks[k] > 0).map(k => `${k}(${wordClicks[k]})`);
   history.push({ id: Date.now(), date: timeStr, filterDate: isoDate, score: currentScore, words: activeWords, memo: document.getElementById('memoInput').value });
   localStorage.setItem('moodHistory', JSON.stringify(history));
@@ -392,16 +413,28 @@ function saveAndReset() {
 
 function toggleHistory() {
   const modal = document.getElementById('historyModal');
-  modal.classList.toggle('show'); if (modal.classList.contains('show')) renderHistory();
+  modal.classList.toggle('show'); 
+  if (modal.classList.contains('show')) {
+    renderHistory();
+    // 展開 modal 時若圖表已顯示，順便刷新
+    if(isChartVisible) updateChartData();
+  }
 }
 
-function clearFilters() { document.getElementById('filterDate').value = ''; document.getElementById('filterScore').value = 'all'; renderHistory(); }
+function clearFilters() { 
+  document.getElementById('filterDate').value = ''; 
+  document.getElementById('filterScore').value = 'all'; 
+  renderHistory(); 
+}
 
 function deleteHistory(id) {
   if(confirm('確定要移除這筆心情紀錄嗎？')) {
     let history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
     history = history.filter(h => h.id !== id);
-    localStorage.setItem('moodHistory', JSON.stringify(history)); renderHistory();
+    localStorage.setItem('moodHistory', JSON.stringify(history)); 
+    renderHistory();
+    // 刪除紀錄後，如果圖表是開著的，即時刷新圖表
+    if(isChartVisible) updateChartData();
   }
 }
 
@@ -423,7 +456,116 @@ function renderHistory() {
       <div class="h-words">點擊：${h.words.join(', ') || '無'}</div>
       <div class="h-memo">${h.memo || '無備註'}</div>
     </div>
-  `).join('') : '<p style="text-align:center; color:#999;">查無紀錄</p>';
+  `).join('') : '<p style="text-align:center; color:#999; margin-top:20px;">查無紀錄</p>';
+}
+
+// 📌 【新功能】趨勢圖繪製與切換邏輯
+function toggleTrendChart() {
+  const container = document.getElementById('chartContainer');
+  isChartVisible = !isChartVisible;
+  
+  if (isChartVisible) {
+    container.style.display = 'block';
+    updateChartData();
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+function updateChartData() {
+  const history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
+  if(history.length === 0) return; // 沒資料就不繪製
+
+  // 1. 抓取近 30 天的資料
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  const recentHistory = history.filter(h => new Date(h.filterDate) >= thirtyDaysAgo)
+                               .sort((a, b) => new Date(a.filterDate) - new Date(b.filterDate));
+
+  // 2. 按日期分組計算每日平均
+  const dailyData = {};
+  recentHistory.forEach(h => {
+    if(!dailyData[h.filterDate]) dailyData[h.filterDate] = { sum: 0, count: 0 };
+    dailyData[h.filterDate].sum += h.score;
+    dailyData[h.filterDate].count += 1;
+  });
+
+  const labels = [];
+  const data = [];
+  
+  Object.keys(dailyData).sort().forEach(date => {
+    // 格式化日期 MM/DD
+    const [y, m, d] = date.split('-');
+    labels.push(`${m}/${d}`);
+    data.push(Math.round(dailyData[date].sum / dailyData[date].count));
+  });
+
+  if (labels.length === 0) return;
+
+  // 3. 使用 Chart.js 繪製美觀曲線圖
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  
+  // 若已存在實例則先銷毀
+  if (chartInstance) chartInstance.destroy();
+
+  // 建立漸層色 (由上方的主題藍綠色向下淡出)
+  let gradient = ctx.createLinearGradient(0, 0, 0, 250);
+  gradient.addColorStop(0, 'rgba(0, 184, 148, 0.4)');
+  gradient.addColorStop(1, 'rgba(0, 184, 148, 0.0)');
+
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '平均心情分數',
+        data: data,
+        borderColor: '#00b894',
+        backgroundColor: gradient,
+        borderWidth: 3,
+        tension: 0.4, // 平滑貝茲曲線
+        fill: true,
+        pointBackgroundColor: '#ffffff',
+        pointBorderColor: '#00b894',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { 
+          min: 0, 
+          max: 100,
+          grid: { color: '#e1e5e8' },
+          ticks: { color: '#546e7a' }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: '#546e7a' }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(44, 62, 80, 0.9)',
+          titleFont: { size: 14 },
+          bodyFont: { size: 14, weight: 'bold' },
+          displayColors: false,
+          callbacks: {
+            label: function(context) { return '分數: ' + context.parsed.y; }
+          }
+        }
+      },
+      interaction: {
+        intersect: false,
+        mode: 'index',
+      },
+    }
+  });
 }
 
 function openCustomize() { tempConfig = JSON.parse(JSON.stringify(wordConfig)); renderCustomizeList(); document.getElementById('customizeModal').classList.add('show'); }
@@ -448,3 +590,5 @@ window.onload = initWords; window.onresize = initWords;
 </script>
 </body>
 </html>
+
+```
