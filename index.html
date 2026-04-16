@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>心情發洩器</title>
+<style>
+  :root {
+    --bg-gradient: linear-gradient(135deg, #fff9c4 0%, #e8f5e9 50%, #e1f5fe 100%);
+    --card-bg: rgba(255, 255, 255, 0.65);
+    --card-border: rgba(255, 255, 255, 0.4);
+    --text-main: #2c3e50;
+    --text-muted: #546e7a;
+    --joy: #ff7675;
+    --anger: #d63031;
+    --sorrow: #0984e3;
+    --pleasure: #00b894;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg-gradient);
+    color: var(--text-main);
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden; 
+  }
+  
+  .top-controls { width: 100%; display: flex; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .ctrl-btn {
+    flex: 1; background: var(--card-bg); backdrop-filter: blur(10px); border: 1px solid var(--card-border);
+    padding: 8px 10px; border-radius: 15px; font-size: 0.9rem; color: var(--text-main);
+    cursor: pointer; font-weight: 600; box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.2s;
+    text-align: center; white-space: nowrap;
+  }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.9); }
+
+  .header-card {
+    background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid var(--card-border);
+    padding: 15px 30px; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+    margin-bottom: 15px; text-align: center; width: 100%; box-sizing: border-box;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .score-area { display: flex; flex-direction: column; align-items: flex-start; }
+  .score-label { font-size: 0.9rem; color: var(--text-muted); font-weight: bold; }
+  .score-number { font-size: 3.5rem; font-weight: 800; line-height: 1; transition: color 0.3s; }
+  .emoji-display { font-size: 3.5rem; transition: transform 0.3s; }
+  
+  .arena {
+    flex-grow: 1; width: 100%; position: relative; background: var(--card-bg);
+    backdrop-filter: blur(10px); border: 1px solid var(--card-border); border-radius: 20px;
+    box-shadow: inset 0 0 20px rgba(255,255,255,0.5), 0 8px 20px rgba(0,0,0,0.03);
+    overflow: hidden; margin-bottom: 15px;
+  }
+  .floating-word {
+    position: absolute; border: none; border-radius: 30px; padding: 10px 18px;
+    font-size: 1.1rem; cursor: pointer; background: rgba(255, 255, 255, 0.8);
+    color: var(--text-muted); user-select: none; -webkit-user-select: none;
+    white-space: nowrap; box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    transition: background 0.2s, color 0.2s; touch-action: none;
+  }
+  .floating-word.active-joy { background: var(--joy); color: white; }
+  .floating-word.active-anger { background: var(--anger); color: white; }
+  .floating-word.active-sorrow { background: var(--sorrow); color: white; }
+  .floating-word.active-pleasure { background: var(--pleasure); color: white; }
+  
+  .bottom-area { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  textarea {
+    width: 100%; height: 60px; padding: 12px; border-radius: 15px;
+    border: 1px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.5);
+    font-size: 1rem; resize: none; box-sizing: border-box; outline: none; transition: background 0.2s;
+  }
+  textarea:focus { background: rgba(255,255,255,0.9); }
+  .save-btn {
+    background: #2d3436; color: white; border: none; padding: 12px; font-size: 1.1rem;
+    font-weight: 600; border-radius: 15px; cursor: pointer; transition: opacity 0.2s;
+  }
+  .save-btn:hover { opacity: 0.8; }
+
+  .modal {
+    display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%;
+    background-color: rgba(0,0,0,0.4); backdrop-filter: blur(4px); justify-content: center; align-items: center;
+  }
+  .modal.show { display: flex; }
+  .modal-content {
+    background: #fff; width: 95%; max-width: 500px; max-height: 85vh; border-radius: 20px;
+    padding: 25px; box-sizing: border-box; position: relative; overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2); display: flex; flex-direction: column;
+  }
+  .close-btn { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: #999; }
+  
+  .filter-bar { display: flex; gap: 10px; margin-bottom: 15px; background: #f0f3f5; padding: 10px; border-radius: 12px; flex-wrap: wrap; }
+  .filter-bar input, .filter-bar select { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 8px; outline: none; }
+  
+  .history-item { background: #f8f9fa; border-left: 5px solid var(--pleasure); padding: 15px; margin-bottom: 15px; border-radius: 8px; position: relative; }
+  .h-date { font-size: 0.85rem; color: #888; margin-bottom: 5px; }
+  .h-score { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; }
+  .h-words { font-size: 0.9rem; color: #444; margin-bottom: 5px; line-height: 1.4; padding-right: 30px; }
+  .h-memo { font-size: 0.9rem; color: #666; background: #fff; padding: 8px; border-radius: 5px; margin-top: 5px; }
+  .h-del-btn { position: absolute; top: 10px; right: 10px; background: none; border: none; color: #ff7675; cursor: pointer; font-size: 1.2rem; padding: 5px; }
+
+  .edit-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; overflow-y: auto; padding-right: 5px; }
+  .edit-row { display: flex; gap: 8px; align-items: center; background: #f8f9fa; padding: 8px; border-radius: 8px; }
+  .edit-row input[type="text"] { flex: 2; padding: 6px; border: 1px solid #ddd; border-radius: 6px; }
+  .edit-row select { flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 6px; }
+  .edit-row input[type="number"] { width: 50px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; text-align: center; }
+  .del-btn { background: #ff7675; color: white; border: none; border-radius: 6px; cursor: pointer; padding: 6px 10px; font-weight: bold; }
+  .add-word-btn { background: #0984e3; color: white; border: none; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: bold; margin-bottom: 15px; }
+  .save-config-btn { background: #00b894; color: white; border: none; padding: 12px; border-radius: 10px; cursor: pointer; font-weight: bold; font-size: 1.1rem; }
+
+  .pop-effect {
+    position: fixed; pointer-events: none; font-weight: 800; font-size: 1.5rem;
+    z-index: 1000; display: flex; gap: 8px; align-items: center; text-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    animation: popUpFade 1s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+  }
+  @keyframes popUpFade {
+    0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+    50% { transform: translate(-50%, -100%) scale(1.5); opacity: 1; }
+    100% { transform: translate(-50%, -150%) scale(1.2); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-controls">
+  <button class="ctrl-btn" onclick="resetScore()">🔄 重置</button>
+  <button class="ctrl-btn" onclick="openCustomize()">⚙️ 字詞設定</button>
+  <button class="ctrl-btn" onclick="toggleHistory()">📅 歷史紀錄</button>
+</div>
+
+<div class="header-card">
+  <div class="score-area">
+    <div class="score-label">今日心情指數</div>
+    <div class="score-number" id="scoreDisplay">50</div>
+  </div>
+  <div class="emoji-display" id="emojiDisplay">😐</div>
+</div>
+
+<div class="arena" id="arena"></div>
+
+<div class="bottom-area">
+  <textarea id="memoInput" placeholder="簡單紀錄當下的情境或備忘..."></textarea>
+  <button class="save-btn" onclick="saveAndReset()">儲存今日紀錄</button>
+</div>
+
+<div id="historyModal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn" onclick="toggleHistory()">&times;</span>
+    <h2 style="margin-top:0; color: #2c3e50;">心情日記回顧</h2>
+    <div class="filter-bar">
+      <input type="date" id="filterDate" onchange="renderHistory()">
+      <select id="filterScore" onchange="renderHistory()">
+        <option value="all">所有狀態</option>
+        <option value="high">良好 (61-100)</option>
+        <option value="mid">平靜 (46-60)</option>
+        <option value="low">低落 (0-45)</option>
+      </select>
+      <button onclick="clearFilters()" style="padding: 8px; border:none; background:#ccc; border-radius:8px; cursor:pointer;">清除</button>
+    </div>
+    <div id="historyList" style="overflow-y:auto; flex-grow:1;"></div>
+  </div>
+</div>
+
+<div id="customizeModal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn" onclick="closeCustomize()">&times;</span>
+    <h2 style="margin-top:0; color: #2c3e50;">自訂專屬字詞</h2>
+    <p style="font-size:0.85rem; color:#666; margin-top:0;">正分請輸入正數，負分請輸入負數。</p>
+    <div class="edit-list" id="customizeList"></div>
+    <button class="add-word-btn" onclick="addTempWord()">➕ 新增字詞</button>
+    <button class="save-config-btn" onclick="saveCustomize()">💾 儲存並套用</button>
+  </div>
+</div>
+
+<script>
+const defaultWordConfig = [
+  { text: '耶', type: 'joy', weight: 5 }, { text: '開心', type: 'joy', weight: 8 }, { text: '幸運哦', type: 'joy', weight: 10 }, { text: '灑花', type: 'joy', weight: 6 }, { text: '狂賀', type: 'joy', weight: 8 },
+  { text: '幹', type: 'anger', weight: -10 }, { text: '媽的', type: 'anger', weight: -8 }, { text: '鬧', type: 'anger', weight: -5 }, { text: '齁', type: 'anger', weight: -4 }, { text: '機掰', type: 'anger', weight: -10 },
+  { text: '唉', type: 'sorrow', weight: -4 }, { text: '嘖', type: 'sorrow', weight: -3 }, { text: '煩', type: 'sorrow', weight: -6 }, { text: '悶', type: 'sorrow', weight: -5 }, { text: '哭哭', type: 'sorrow', weight: -7 },
+  { text: '水', type: 'pleasure', weight: 8 }, { text: '讚', type: 'pleasure', weight: 6 }, { text: '爽', type: 'pleasure', weight: 10 }, { text: '舒服', type: 'pleasure', weight: 7 }, { text: '完美', type: 'pleasure', weight: 9 }
+];
+
+let wordConfig = JSON.parse(localStorage.getItem('customWordConfig')) || defaultWordConfig;
+let currentScore = 50;
+let wordClicks = {}; 
+let elements = [];
+let animationId;
+const arena = document.getElementById('arena');
+
+function initWords() {
+  const rect = arena.getBoundingClientRect();
+  arena.innerHTML = '';
+  elements = [];
+  wordClicks = {};
+
+  wordConfig.forEach(config => {
+    wordClicks[config.text] = 0;
+    const el = document.createElement('button');
+    el.className = 'floating-word';
+    el.innerText = config.text;
+    arena.appendChild(el);
+    const w = el.clientWidth, h = el.clientHeight;
+    let x, y, overlapping = true, attempts = 0;
+    while(overlapping && attempts < 50) {
+      x = Math.random() * Math.max(0, rect.width - w);
+      y = Math.random() * Math.max(0, rect.height - h);
+      overlapping = false;
+      for(let e of elements) {
+        if (Math.abs((x+w/2) - (e.x+e.w/2)) < (w + e.w)/2 + 5 && Math.abs((y+h/2) - (e.y+e.h/2)) < (h + e.h)/2 + 5) {
+          overlapping = true; break;
+        }
+      }
+      attempts++;
+    }
+    const vx = (Math.random() - 0.5) * 1.05, vy = (Math.random() - 0.5) * 1.05;
+    elements.push({ el, config, x, y, vx, vy, w, h, sw: w, sh: h, currentScale: 1 });
+    updateWordStyle(elements[elements.length-1]);
+    bindInteractions(elements[elements.length-1]);
+  });
+  if(animationId) cancelAnimationFrame(animationId);
+  animate();
+  updateDisplay();
+}
+
+function animate() {
+  const rect = arena.getBoundingClientRect();
+  elements.forEach(item => {
+    const count = wordClicks[item.config.text] || 0;
+    item.currentScale = count > 0 ? Math.min(1 + (count * 0.05), 1.3) : 1;
+    item.sw = item.w * item.currentScale;
+    item.sh = item.h * item.currentScale;
+    item.x += item.vx; item.y += item.vy;
+  });
+  for(let i = 0; i < elements.length; i++) {
+    for(let j = i + 1; j < elements.length; j++) {
+      let a = elements[i], b = elements[j];
+      let dx = (b.x + b.w/2) - (a.x + a.w/2), dy = (b.y + b.h/2) - (a.y + a.h/2);
+      let minX = (a.sw + b.sw) / 2 + 2, minY = (a.sh + b.sh) / 2 + 2;
+      if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
+        if (Math.abs(dx) < minX) { 
+          let overlapX = minX - Math.abs(dx), dir = dx > 0 ? 1 : -1;
+          a.x -= (overlapX / 2) * dir; b.x += (overlapX / 2) * dir;
+          let tempVx = a.vx; a.vx = b.vx; b.vx = tempVx;
+        }
+      }
+    }
+  }
+  elements.forEach(item => {
+    const ox = (item.sw - item.w) / 2, oy = (item.sh - item.h) / 2;
+    const mbX = ox + 2, mxX = rect.width - item.w - ox - 2, mbY = oy + 2, mxY = rect.height - item.h - oy - 2;
+    if (item.x < mbX) { item.x = mbX; item.vx = Math.abs(item.vx); }
+    else if (item.x > mxX) { item.x = mxX; item.vx = -Math.abs(item.vx); }
+    if (item.y < mbY) { item.y = mbY; item.vy = Math.abs(item.vy); }
+    else if (item.y > mxY) { item.y = mxY; item.vy = -Math.abs(item.vy); }
+    item.el.style.transform = `translate(${item.x}px, ${item.y}px) scale(${item.currentScale})`;
+  });
+  animationId = requestAnimationFrame(animate);
+}
+
+function bindInteractions(item) {
+  let pressTimer, startPos = { x: 0, y: 0 };
+  const startPress = (e) => {
+    startPos = { x: e.clientX || e.touches[0].clientX, y: e.clientY || e.touches[0].clientY };
+    pressTimer = setTimeout(() => {
+      const clicks = wordClicks[item.config.text];
+      if (clicks > 0) {
+        currentScore -= (clicks * item.config.weight);
+        wordClicks[item.config.text] = 0;
+        updateWordStyle(item); updateDisplay();
+        createPopEffect(item.config.text, '歸零', startPos.x, startPos.y, '#546e7a');
+      }
+      pressTimer = null;
+    }, 800);
+  };
+  const endPress = (e) => {
+    if (pressTimer) {
+      clearTimeout(pressTimer); 
+      const endX = e.clientX || (e.changedTouches ? e.changedTouches[0].clientX : startPos.x);
+      const endY = e.clientY || (e.changedTouches ? e.changedTouches[0].clientY : startPos.y);
+      if (Math.abs(endX - startPos.x) > 5 || Math.abs(endY - startPos.y) > 5) return;
+      wordClicks[item.config.text]++; currentScore += item.config.weight;
+      updateWordStyle(item); updateDisplay();
+      const color = item.config.weight > 0 ? (item.config.type === 'joy' ? '#ff7675' : '#00b894') : (item.config.type === 'anger' ? '#d63031' : '#0984e3');
+      createPopEffect(item.config.text, (item.config.weight > 0 ? '+' : '') + item.config.weight, endX, endY, color);
+    }
+  };
+  item.el.addEventListener('mousedown', startPress); item.el.addEventListener('mouseup', endPress);
+  item.el.addEventListener('mouseleave', () => clearTimeout(pressTimer)); 
+  item.el.addEventListener('touchstart', startPress, {passive: true}); item.el.addEventListener('touchend', endPress);
+}
+
+function createPopEffect(text, val, x, y, color) {
+  const pop = document.createElement('div'); pop.className = 'pop-effect';
+  pop.style.left = `${x}px`; pop.style.top = `${y}px`; pop.style.color = color;
+  pop.innerHTML = `<span>${text}</span><span>${val}</span>`; document.body.appendChild(pop);
+  setTimeout(() => pop.remove(), 1000);
+}
+
+function updateWordStyle(item) {
+  const count = wordClicks[item.config.text]; item.el.className = 'floating-word';
+  if (count > 0) { item.el.classList.add(`active-${item.config.type}`); } 
+}
+
+function updateDisplay() {
+  currentScore = Math.max(0, Math.min(100, currentScore));
+  document.getElementById('scoreDisplay').innerText = currentScore;
+  const emojiEl = document.getElementById('emojiDisplay');
+  let emoji = '😐', color = 'var(--text-muted)';
+  if (currentScore >= 91) { emoji = '🤩'; color = 'var(--pleasure)'; }
+  else if (currentScore >= 76) { emoji = '😄'; color = 'var(--pleasure)'; }
+  else if (currentScore >= 61) { emoji = '🙂'; color = 'var(--joy)'; }
+  else if (currentScore >= 46) { emoji = '😐'; color = 'var(--text-muted)'; }
+  else if (currentScore >= 31) { emoji = '😔'; color = 'var(--sorrow)'; }
+  else if (currentScore >= 16) { emoji = '😭'; color = 'var(--sorrow)'; }
+  else { emoji = '🤬'; color = 'var(--anger)'; }
+  document.getElementById('scoreDisplay').style.color = color;
+  if (emojiEl.innerText !== emoji) {
+    emojiEl.style.transform = 'scale(0.5)';
+    setTimeout(() => { emojiEl.innerText = emoji; emojiEl.style.transform = 'scale(1)'; }, 150);
+  }
+}
+
+function resetScore() {
+  if(confirm('重置目前分數？')) { currentScore = 50; document.getElementById('memoInput').value = ''; initWords(); }
+}
+
+function saveAndReset() {
+  const now = new Date(), timeStr = now.toLocaleDateString('zh-TW') + ' ' + now.toLocaleTimeString('zh-TW', {hour: '2-digit', minute:'2-digit'});
+  const isoDate = now.toISOString().split('T')[0], history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
+  const activeWords = Object.keys(wordClicks).filter(k => wordClicks[k] > 0).map(k => `${k}(${wordClicks[k]})`);
+  history.push({ id: Date.now(), date: timeStr, filterDate: isoDate, score: currentScore, words: activeWords, memo: document.getElementById('memoInput').value });
+  localStorage.setItem('moodHistory', JSON.stringify(history));
+  alert('儲存成功！'); currentScore = 50; document.getElementById('memoInput').value = ''; initWords();
+}
+
+function toggleHistory() {
+  const modal = document.getElementById('historyModal');
+  modal.classList.toggle('show'); if (modal.classList.contains('show')) renderHistory();
+}
+
+function clearFilters() { document.getElementById('filterDate').value = ''; document.getElementById('filterScore').value = 'all'; renderHistory(); }
+
+function deleteHistory(id) {
+  if(confirm('確定要移除這筆心情紀錄嗎？')) {
+    let history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
+    history = history.filter(h => h.id !== id);
+    localStorage.setItem('moodHistory', JSON.stringify(history)); renderHistory();
+  }
+}
+
+function renderHistory() {
+  const history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
+  const list = document.getElementById('historyList'), fDate = document.getElementById('filterDate').value, fScore = document.getElementById('filterScore').value;
+  let filtered = history.filter(h => {
+    let dMatch = !fDate || (h.filterDate === fDate), sMatch = true;
+    if (fScore === 'high' && h.score < 61) sMatch = false;
+    else if (fScore === 'mid' && (h.score < 46 || h.score > 60)) sMatch = false;
+    else if (fScore === 'low' && h.score > 45) sMatch = false;
+    return dMatch && sMatch;
+  });
+  list.innerHTML = filtered.length ? filtered.reverse().map(h => `
+    <div class="history-item" style="border-left-color: ${h.score < 46 ? '#d63031' : h.score > 60 ? '#00b894' : '#546e7a'}">
+      <button class="h-del-btn" onclick="deleteHistory(${h.id})">🗑️</button>
+      <div class="h-date">${h.date}</div>
+      <div class="h-score" style="color: ${h.score < 46 ? '#d63031' : h.score > 60 ? '#00b894' : '#546e7a'}">分數：${h.score}</div>
+      <div class="h-words">點擊：${h.words.join(', ') || '無'}</div>
+      <div class="h-memo">${h.memo || '無備註'}</div>
+    </div>
+  `).join('') : '<p style="text-align:center; color:#999;">查無紀錄</p>';
+}
+
+function openCustomize() { tempConfig = JSON.parse(JSON.stringify(wordConfig)); renderCustomizeList(); document.getElementById('customizeModal').classList.add('show'); }
+function closeCustomize() { document.getElementById('customizeModal').classList.remove('show'); }
+function renderCustomizeList() {
+  document.getElementById('customizeList').innerHTML = tempConfig.map((w, i) => `
+    <div class="edit-row">
+      <input type="text" value="${w.text}" onchange="tempConfig[${i}].text=this.value">
+      <select onchange="tempConfig[${i}].type=this.value">
+        <option value="joy" ${w.type==='joy'?'selected':''}>喜</option><option value="anger" ${w.type==='anger'?'selected':''}>怒</option>
+        <option value="sorrow" ${w.type==='sorrow'?'selected':''}>哀</option><option value="pleasure" ${w.type==='pleasure'?'selected':''}>樂</option>
+      </select>
+      <input type="number" value="${w.weight}" onchange="tempConfig[${i}].weight=parseInt(this.value)">
+      <button class="del-btn" onclick="tempConfig.splice(${i},1);renderCustomizeList()">✖</button>
+    </div>
+  `).join('');
+}
+function addTempWord() { tempConfig.push({ text: '新詞', type: 'joy', weight: 5 }); renderCustomizeList(); }
+function saveCustomize() { wordConfig = tempConfig.filter(w => w.text.trim()); localStorage.setItem('customWordConfig', JSON.stringify(wordConfig)); closeCustomize(); currentScore = 50; initWords(); }
+
+window.onload = initWords; window.onresize = initWords;
+</script>
+</body>
+</html>
