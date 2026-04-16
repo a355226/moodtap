@@ -104,13 +104,18 @@
   .close-btn { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: #999; z-index: 10; }
   
   .filter-bar { display: flex; gap: 8px; margin-bottom: 15px; background: #f0f3f5; padding: 10px; border-radius: 12px; flex-wrap: wrap; align-items: center; }
-  .filter-bar input, .filter-bar select { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 8px; outline: none; min-width: 100px; }
+  
+  /* 日期框佔位符修復 */
+  .filter-bar input[type="text"], .filter-bar input[type="date"], .filter-bar select { 
+    flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 8px; outline: none; min-width: 100px; 
+    font-family: inherit;
+  }
+  
   .action-btn { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
   .action-btn:hover { opacity: 0.8; }
   .btn-clear { background: #ccc; color: #333; }
   .btn-chart { background: #0984e3; color: #fff; flex-grow: 1; text-align: center; }
   
-  /* 圖表容器 */
   .chart-container {
     width: 100%; height: 250px; display: none; margin-bottom: 15px;
     background: #f8f9fa; border-radius: 12px; padding: 10px; box-sizing: border-box;
@@ -179,7 +184,11 @@
     <h2 style="margin-top:0; color: #2c3e50;">心情日記回顧</h2>
     
     <div class="filter-bar">
-      <input type="date" id="filterDate" onchange="renderHistory()">
+      <input type="text" id="filterDate" placeholder="📅 日期篩選" 
+             onfocus="(this.type='date')" 
+             onblur="(this.value == '' ? this.type='text' : this.type='date')" 
+             onchange="renderHistory()">
+             
       <select id="filterScore" onchange="renderHistory()">
         <option value="all">所有狀態</option>
         <option value="high">良好 (61-100)</option>
@@ -222,7 +231,7 @@ let currentScore = 50;
 let wordClicks = {}; 
 let elements = [];
 let animationId;
-let chartInstance = null; // 儲存圖表實例
+let chartInstance = null;
 let isChartVisible = false;
 
 const arena = document.getElementById('arena');
@@ -395,7 +404,8 @@ function resetScore() {
 
 function saveAndReset() {
   const now = new Date(), timeStr = now.toLocaleDateString('zh-TW') + ' ' + now.toLocaleTimeString('zh-TW', {hour: '2-digit', minute:'2-digit'});
-  const isoDate = now.toISOString().split('T')[0], history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
+  const isoDate = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  const history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
   const activeWords = Object.keys(wordClicks).filter(k => wordClicks[k] > 0).map(k => `${k}(${wordClicks[k]})`);
   history.push({ id: Date.now(), date: timeStr, filterDate: isoDate, score: currentScore, words: activeWords, memo: document.getElementById('memoInput').value });
   localStorage.setItem('moodHistory', JSON.stringify(history));
@@ -405,15 +415,21 @@ function saveAndReset() {
 function toggleHistory() {
   const modal = document.getElementById('historyModal');
   modal.classList.toggle('show'); 
+  
+  // Modal 打開時重置日期框狀態為 text 以顯示 Placeholder
+  const dateInput = document.getElementById('filterDate');
+  if(!dateInput.value) dateInput.type = 'text';
+
   if (modal.classList.contains('show')) {
     renderHistory();
-    // 展開 modal 時若圖表已顯示，順便刷新
     if(isChartVisible) updateChartData();
   }
 }
 
 function clearFilters() { 
-  document.getElementById('filterDate').value = ''; 
+  const dateInput = document.getElementById('filterDate');
+  dateInput.value = ''; 
+  dateInput.type = 'text'; // 確保清除後顯示 Placeholder
   document.getElementById('filterScore').value = 'all'; 
   renderHistory(); 
 }
@@ -424,7 +440,6 @@ function deleteHistory(id) {
     history = history.filter(h => h.id !== id);
     localStorage.setItem('moodHistory', JSON.stringify(history)); 
     renderHistory();
-    // 刪除紀錄後，如果圖表是開著的，即時刷新圖表
     if(isChartVisible) updateChartData();
   }
 }
@@ -450,11 +465,9 @@ function renderHistory() {
   `).join('') : '<p style="text-align:center; color:#999; margin-top:20px;">查無紀錄</p>';
 }
 
-// 📌 【新功能】趨勢圖繪製與切換邏輯
 function toggleTrendChart() {
   const container = document.getElementById('chartContainer');
   isChartVisible = !isChartVisible;
-  
   if (isChartVisible) {
     container.style.display = 'block';
     updateChartData();
@@ -463,44 +476,44 @@ function toggleTrendChart() {
   }
 }
 
+// 📌 【修正計算邏輯】強制轉數字避免字串串接，正確計算當日平均
 function updateChartData() {
   const history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
-  if(history.length === 0) return; // 沒資料就不繪製
+  if(history.length === 0) return; 
 
-  // 1. 抓取近 30 天的資料
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
+  // 篩選出近30天的紀錄
   const recentHistory = history.filter(h => new Date(h.filterDate) >= thirtyDaysAgo)
                                .sort((a, b) => new Date(a.filterDate) - new Date(b.filterDate));
 
-  // 2. 按日期分組計算每日平均
   const dailyData = {};
   recentHistory.forEach(h => {
-    if(!dailyData[h.filterDate]) dailyData[h.filterDate] = { sum: 0, count: 0 };
-    dailyData[h.filterDate].sum += h.score;
-    dailyData[h.filterDate].count += 1;
+    const dateKey = h.filterDate;
+    if(!dailyData[dateKey]) dailyData[dateKey] = { sum: 0, count: 0 };
+    
+    // 強制把分數轉成 Number，避免舊資料存成字串時發生 "50"+"60"="5060" 的 Bug
+    dailyData[dateKey].sum += Number(h.score);
+    dailyData[dateKey].count += 1;
   });
 
   const labels = [];
   const data = [];
   
   Object.keys(dailyData).sort().forEach(date => {
-    // 格式化日期 MM/DD
-    const [y, m, d] = date.split('-');
-    labels.push(`${m}/${d}`);
-    data.push(Math.round(dailyData[date].sum / dailyData[date].count));
+    const parts = date.split('-');
+    if(parts.length === 3) {
+      labels.push(`${parts[1]}/${parts[2]}`);
+      data.push(Math.round(dailyData[date].sum / dailyData[date].count));
+    }
   });
 
   if (labels.length === 0) return;
 
-  // 3. 使用 Chart.js 繪製美觀曲線圖
   const ctx = document.getElementById('trendChart').getContext('2d');
-  
-  // 若已存在實例則先銷毀
   if (chartInstance) chartInstance.destroy();
 
-  // 建立漸層色 (由上方的主題藍綠色向下淡出)
   let gradient = ctx.createLinearGradient(0, 0, 0, 250);
   gradient.addColorStop(0, 'rgba(0, 184, 148, 0.4)');
   gradient.addColorStop(1, 'rgba(0, 184, 148, 0.0)');
@@ -515,7 +528,7 @@ function updateChartData() {
         borderColor: '#00b894',
         backgroundColor: gradient,
         borderWidth: 3,
-        tension: 0.4, // 平滑貝茲曲線
+        tension: 0.4, 
         fill: true,
         pointBackgroundColor: '#ffffff',
         pointBorderColor: '#00b894',
@@ -528,33 +541,18 @@ function updateChartData() {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        y: { 
-          min: 0, 
-          max: 100,
-          grid: { color: '#e1e5e8' },
-          ticks: { color: '#546e7a' }
-        },
-        x: {
-          grid: { display: false },
-          ticks: { color: '#546e7a' }
-        }
+        y: { min: 0, max: 100, grid: { color: '#e1e5e8' }, ticks: { color: '#546e7a' } },
+        x: { grid: { display: false }, ticks: { color: '#546e7a' } }
       },
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(44, 62, 80, 0.9)',
-          titleFont: { size: 14 },
-          bodyFont: { size: 14, weight: 'bold' },
-          displayColors: false,
-          callbacks: {
-            label: function(context) { return '分數: ' + context.parsed.y; }
-          }
+          backgroundColor: 'rgba(44, 62, 80, 0.9)', titleFont: { size: 14 },
+          bodyFont: { size: 14, weight: 'bold' }, displayColors: false,
+          callbacks: { label: function(context) { return '平均分數: ' + context.parsed.y; } }
         }
       },
-      interaction: {
-        intersect: false,
-        mode: 'index',
-      },
+      interaction: { intersect: false, mode: 'index' },
     }
   });
 }
