@@ -114,6 +114,9 @@
   .action-btn:hover { opacity: 0.8; }
   .btn-clear { background: #ccc; color: #333; }
   .btn-chart { background: #0984e3; color: #fff; flex-grow: 1; text-align: center; }
+
+  .filter-star-btn { padding: 8px 12px; border: 1px solid #ccc; background: #fff; border-radius: 8px; cursor: pointer; font-size: 1rem; filter: grayscale(100%); opacity: 0.6; transition: all 0.2s; }
+  .filter-star-btn.active { filter: none; opacity: 1; border-color: #f1c40f; background: #fffdf0; }
   
   .chart-container {
     width: 100%; height: 250px; display: none; margin-bottom: 15px;
@@ -138,7 +141,11 @@
   }
   .h-memo-edit:focus { border: 1px solid #0984e3; outline: none; }
 
-  .h-del-btn { position: absolute; top: 10px; right: 10px; background: none; border: none; color: #ff7675; cursor: pointer; font-size: 1.2rem; padding: 5px; }
+  .h-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 5px; z-index: 5; }
+  .h-action-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 5px; transition: all 0.2s; }
+  .h-del-btn { color: #ff7675; }
+  .h-star-btn { filter: grayscale(100%); opacity: 0.4; }
+  .h-star-btn.starred { filter: none; opacity: 1; transform: scale(1.1); }
 
   .edit-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; overflow-y: auto; padding-right: 5px; }
   .edit-row { display: flex; gap: 8px; align-items: center; background: #f8f9fa; padding: 8px; border-radius: 8px; }
@@ -204,6 +211,7 @@
         <option value="mid">平靜 (46-60)</option>
         <option value="low">低落 (0-45)</option>
       </select>
+      <button id="filterStarBtn" class="filter-star-btn" onclick="toggleStarFilter()" title="只顯示重要紀錄">⭐</button>
       <button class="action-btn btn-clear" onclick="clearFilters()">清除</button>
       <button class="action-btn btn-chart" onclick="toggleTrendChart()">📈 近月趨勢圖</button>
     </div>
@@ -257,6 +265,7 @@ let elements = [];
 let animationId;
 let chartInstance = null;
 let isChartVisible = false;
+let isFilterStarred = false;
 
 let lastClickedDataIndex = null;
 let lastClickedTime = 0;
@@ -434,7 +443,7 @@ function saveAndReset() {
   const isoDate = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
   const history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
   const activeWords = Object.keys(wordClicks).filter(k => wordClicks[k] > 0).map(k => `${k}(${wordClicks[k]})`);
-  history.push({ id: Date.now(), date: timeStr, filterDate: isoDate, score: currentScore, words: activeWords, memo: document.getElementById('memoInput').value });
+  history.push({ id: Date.now(), date: timeStr, filterDate: isoDate, score: currentScore, words: activeWords, memo: document.getElementById('memoInput').value, isStarred: false });
   localStorage.setItem('moodHistory', JSON.stringify(history));
   alert('儲存成功！'); currentScore = 50; document.getElementById('memoInput').value = ''; initWords();
 }
@@ -452,12 +461,35 @@ function toggleHistory() {
   }
 }
 
+function toggleStarFilter() {
+  isFilterStarred = !isFilterStarred;
+  const btn = document.getElementById('filterStarBtn');
+  if (isFilterStarred) {
+    btn.classList.add('active');
+  } else {
+    btn.classList.remove('active');
+  }
+  renderHistory();
+}
+
 function clearFilters() { 
   const dateInput = document.getElementById('filterDate');
   dateInput.value = ''; 
   dateInput.type = 'text';
   document.getElementById('filterScore').value = 'all'; 
+  isFilterStarred = false;
+  document.getElementById('filterStarBtn').classList.remove('active');
   renderHistory(); 
+}
+
+function toggleStar(id) {
+  let history = JSON.parse(localStorage.getItem('moodHistory') || '[]');
+  let target = history.find(h => h.id === id);
+  if (target) {
+    target.isStarred = !target.isStarred;
+    localStorage.setItem('moodHistory', JSON.stringify(history));
+    renderHistory();
+  }
 }
 
 function deleteHistory(id) {
@@ -487,11 +519,15 @@ function renderHistory() {
     if (fScore === 'high' && h.score < 61) sMatch = false;
     else if (fScore === 'mid' && (h.score < 46 || h.score > 60)) sMatch = false;
     else if (fScore === 'low' && h.score > 45) sMatch = false;
-    return dMatch && sMatch;
+    let starMatch = !isFilterStarred || h.isStarred;
+    return dMatch && sMatch && starMatch;
   });
   list.innerHTML = filtered.length ? filtered.reverse().map(h => `
     <div class="history-item" style="border-left-color: ${h.score < 46 ? '#d63031' : h.score > 60 ? '#00b894' : '#546e7a'}">
-      <button class="h-del-btn" onclick="deleteHistory(${h.id})">🗑️</button>
+      <div class="h-actions">
+        <button class="h-action-btn h-star-btn ${h.isStarred ? 'starred' : ''}" onclick="toggleStar(${h.id})">⭐</button>
+        <button class="h-action-btn h-del-btn" onclick="deleteHistory(${h.id})">🗑️</button>
+      </div>
       <div class="h-date">${h.date}</div>
       <div class="h-score" style="color: ${h.score < 46 ? '#d63031' : h.score > 60 ? '#00b894' : '#546e7a'}">分數：${h.score}</div>
       <div class="h-words">點擊：${h.words.join(', ') || '無'}</div>
@@ -576,26 +612,21 @@ function updateChartData() {
           const dataIndex = elements[0].index;
           const labelDate = chartInstance.data.labels[dataIndex];
           
-          // 判斷是否為行動裝置或觸控螢幕
           const isMobile = window.innerWidth <= 768 || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
           
           if (isMobile) {
             const currentTime = new Date().getTime();
-            // 如果點擊同一個點，且距離上次點擊不超過 3 秒，則判定為第二次點擊 -> 開啟視窗
             if (lastClickedDataIndex === dataIndex && (currentTime - lastClickedTime < 3000)) {
               showChartDetails(labelDate);
-              lastClickedDataIndex = null; // 重置
+              lastClickedDataIndex = null; 
             } else {
-              // 第一次點擊，只記錄時間與索引，讓 Chart.js 原生的 tooltip 顯示
               lastClickedDataIndex = dataIndex;
               lastClickedTime = currentTime;
             }
           } else {
-            // 電腦版直接開啟詳細視窗
             showChartDetails(labelDate);
           }
         } else {
-          // 點擊到圖表空白處時重置
           lastClickedDataIndex = null;
         }
       },
@@ -627,7 +658,7 @@ function showChartDetails(labelDate) {
   if (matches.length > 0) {
     content.innerHTML = matches.map(m => `
       <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:10px; border-left: 4px solid #00b894;">
-        <div style="font-size:0.85rem; color:#888; margin-bottom:5px;">${m.date}</div>
+        <div style="font-size:0.85rem; color:#888; margin-bottom:5px;">${m.date} ${m.isStarred ? '⭐' : ''}</div>
         <div style="font-weight:bold; margin-bottom:5px;">分數：${m.score}</div>
         <div style="font-size:0.9rem; margin-bottom:5px;">字詞：${m.words.join(', ') || '無'}</div>
         <div style="font-size:0.9rem; color:#666;">備註：${m.memo || '無'}</div>
